@@ -80,6 +80,8 @@ private:
   VkPipelineLayout m_layout;
 
   VkBuffer m_A, m_B, m_sum;
+
+  std::vector<float> m_values;
  
   void CreateInstance();
   void CreateDevice(uint32_t a_deviceId);

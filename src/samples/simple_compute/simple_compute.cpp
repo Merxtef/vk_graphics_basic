@@ -3,6 +3,7 @@
 #include <vk_pipeline.h>
 #include <vk_buffers.h>
 #include <vk_utils.h>
+#include <chrono>
 
 SimpleCompute::SimpleCompute(uint32_t a_length) : m_length(a_length)
 {
@@ -11,6 +12,13 @@ SimpleCompute::SimpleCompute(uint32_t a_length) : m_length(a_length)
 #else
   m_enableValidation = true;
 #endif
+
+  srand(time(NULL));
+
+  m_values.reserve(m_length);
+
+  for (int i = 0; i < m_length; ++i)
+    m_values.push_back(rand() / ((float) RAND_MAX) * 16.f);
 }
 
 void SimpleCompute::SetupValidationLayers()
@@ -95,15 +103,8 @@ void SimpleCompute::SetupSimplePipeline()
   m_pBindings->BindEnd(&m_sumDS, &m_sumDSLayout);
 
   // Заполнение буферов
-  std::vector<float> values(m_length);
-  for (uint32_t i = 0; i < values.size(); ++i) {
-    values[i] = (float)i;
-  }
-  m_pCopyHelper->UpdateBuffer(m_A, 0, values.data(), sizeof(float) * values.size());
-  for (uint32_t i = 0; i < values.size(); ++i) {
-    values[i] = (float)i * i;
-  }
-  m_pCopyHelper->UpdateBuffer(m_B, 0, values.data(), sizeof(float) * values.size());
+  m_pCopyHelper->UpdateBuffer(m_A, 0, m_values.data(), sizeof(float) * m_values.size());
+  m_pCopyHelper->UpdateBuffer(m_B, 0, m_values.data(), sizeof(float) * m_values.size());
 }
 
 void SimpleCompute::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, VkPipeline)
@@ -122,7 +123,7 @@ void SimpleCompute::BuildCommandBufferSimple(VkCommandBuffer a_cmdBuff, VkPipeli
 
   vkCmdPushConstants(a_cmdBuff, m_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(m_length), &m_length);
 
-  vkCmdDispatch(a_cmdBuff, 1, 1, 1);
+  vkCmdDispatch(a_cmdBuff, 1024, 1, 1);
 
   VK_CHECK_RESULT(vkEndCommandBuffer(a_cmdBuff));
 }
@@ -202,6 +203,8 @@ void SimpleCompute::CreateComputePipeline()
 
 void SimpleCompute::Execute()
 {
+  auto start_gpu = std::chrono::high_resolution_clock::now();
+
   SetupSimplePipeline();
   CreateComputePipeline();
 
@@ -225,7 +228,46 @@ void SimpleCompute::Execute()
 
   std::vector<float> values(m_length);
   m_pCopyHelper->ReadBuffer(m_sum, 0, values.data(), sizeof(float) * values.size());
+  float gpu_sum = 0;
   for (auto v: values) {
-    std::cout << v << ' ';
+    gpu_sum += v;
   }
+
+  auto end_gpu = std::chrono::high_resolution_clock::now();
+  auto gpu_dt = std::chrono::duration_cast<std::chrono::microseconds>(end_gpu - start_gpu);
+
+  std::cout << "GPU sum  = " << gpu_sum << "\n"
+            << "GPU time = " << gpu_dt.count() << "ms\n";
+  auto start_cpu = std::chrono::high_resolution_clock::now();
+
+  std::vector<float> &a = m_values;
+  std::vector<float> b(m_length);
+  std::vector<float> sum(m_length);
+
+  b[0] = a[0] / 7.f + a[1] / 7.f + a[2] / 7.f + a[3] / 7.f;
+  b[1] = b[0] + a[4] / 7.f;
+  b[2] = b[1] + a[5] / 7.f;
+
+  const int last = b.size() - 3;
+  for (int i = 3; i < last; ++i)
+    b[i] =
+      a[i - 3] / 7.f + a[i - 2] / 7.f + a[i - 1] / 7.f +
+      a[i] / 7.f +
+      a[i + 1] / 7.f + a[i + 2] / 7.f + a[i + 3] / 7.f;
+
+  b[last + 2] = a[last + 2] / 7.f + a[last + 1] / 7.f + a[last] / 7.f + a[last - 1] / 7.f;
+  b[last + 1] = b[last + 2] + a[last - 2] / 7.f;
+  b[last]     = b[last + 1] + a[last - 3] / 7.f;
+
+  float cpu_sum = 0;
+  for (int i = 0; i < sum.size(); ++i)
+  {
+    sum[i] = a[i] - b[i];
+    cpu_sum += sum[i];
+  }
+
+  auto end_cpu = std::chrono::high_resolution_clock::now();
+  auto cpu_dt  = std::chrono::duration_cast<std::chrono::microseconds>(end_cpu - start_cpu);
+  std::cout << "CPU sum  = " << cpu_sum << "\n"
+            << "CPU time = " << cpu_dt.count() << "ms\n";
 }

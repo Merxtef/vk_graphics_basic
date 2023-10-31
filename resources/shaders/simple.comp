@@ -1,6 +1,6 @@
 #version 430
 
-layout( local_size_x = 32 ) in;
+layout( local_size_x = 1024 ) in;
 
 layout( push_constant ) uniform params {
   uint len;
@@ -25,6 +25,10 @@ void main()
 {
     uint idx = gl_GlobalInvocationID.x;
     if (idx < PushConstant.len) {
-        sum[idx] = A[idx] + B[idx];
+        B[idx] = 0;
+        for (int i = -3; i <= 3; ++i)
+            B[idx] += A[idx + i] / 7.f;
+
+        sum[idx] = A[idx] - B[idx];
     }
 }
