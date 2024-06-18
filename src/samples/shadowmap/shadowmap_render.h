@@ -81,6 +81,11 @@ private:
   VkSurfaceKHR m_surface = VK_NULL_HANDLE;
   VulkanSwapChain m_swapchain;
 
+  float spotlightInnerAngle = 5.f;
+  float spotlightOuterAngle = 6.f;
+  shader_vec3 spotlightLookAt = shader_vec3(0.f, -0.7f, 0.f);
+  shader_vec3 spotlightPos = shader_vec3(7.f, 4.f, 8.f);
+
   Camera   m_cam;
   uint32_t m_width  = 1024u;
   uint32_t m_height = 1024u;
