@@ -1,0 +1,160 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "common.h"
+const int HALF_WINDOW = 5;
+
+layout (local_size_x = WORKGROUP_DIM, local_size_y = WORKGROUP_DIM) in;
+
+layout (rgba32f, binding = 0) uniform readonly image2D inImage;
+layout (rgba32f, binding = 1) uniform writeonly image2D outImage;
+
+shared vec3[WORKGROUP_DIM + 2*HALF_WINDOW][WORKGROUP_DIM + 2*HALF_WINDOW] tmp;
+
+const float gauss_coeff[2*HALF_WINDOW + 1] = {
+	   0.03548293, 0.05850147, 0.08630959, 0.1139453 , 0.13461047,
+       0.14230046, 0.13461047, 0.1139453 , 0.08630959, 0.05850147,
+       0.03548293
+};
+
+void loadImgPart()
+{
+	uvec2 wgSize = gl_WorkGroupSize.xy;
+	ivec2 imageSize = imageSize(inImage);
+	uvec2 gi_id = gl_GlobalInvocationID.xy;
+	uvec2 li_id = gl_LocalInvocationID.xy;
+
+	tmp[li_id.y + HALF_WINDOW][li_id.x + HALF_WINDOW] = imageLoad(inImage, ivec2(gi_id)).rgb;
+
+	if (li_id.x < HALF_WINDOW)
+	{
+		if (gi_id.x < HALF_WINDOW)
+		{
+			tmp[li_id.y + HALF_WINDOW][li_id.x] = vec3(0.0f);
+		}
+		else
+		{
+			tmp[li_id.y + HALF_WINDOW][li_id.x] = imageLoad(inImage, ivec2(gi_id.x - HALF_WINDOW, gi_id.y)).rgb;
+		}
+
+		if (li_id.y < HALF_WINDOW)
+		{
+			if (gi_id.x < HALF_WINDOW || gi_id.y < HALF_WINDOW)
+			{
+				tmp[li_id.y][li_id.x] = vec3(0.0f);
+			}
+			else
+			{
+				tmp[li_id.y][li_id.x] = imageLoad(inImage, ivec2(gi_id.x - HALF_WINDOW, gi_id.y - HALF_WINDOW)).rgb;
+			}
+		}
+		else if (li_id.y > wgSize.y - HALF_WINDOW - 1)
+		{
+			if (gi_id.x < HALF_WINDOW || gi_id.y > imageSize.y - HALF_WINDOW - 1)
+			{
+				tmp[li_id.y + 2*HALF_WINDOW][li_id.x] = vec3(0.0f);
+			}
+			else
+			{
+				tmp[li_id.y + 2*HALF_WINDOW][li_id.x] = imageLoad(inImage, ivec2(gi_id.x - HALF_WINDOW, gi_id.y + HALF_WINDOW)).rgb;
+			}
+		}
+	}
+	else if (li_id.x > wgSize.x - HALF_WINDOW - 1)
+	{
+		if (gi_id.x > imageSize.x + HALF_WINDOW - 1)
+		{
+			tmp[li_id.y + HALF_WINDOW][li_id.x + 2*HALF_WINDOW] = vec3(0.0f);
+		}
+		else
+		{
+			tmp[li_id.y + HALF_WINDOW][li_id.x + 2*HALF_WINDOW] = imageLoad(inImage, ivec2(gi_id.x + HALF_WINDOW, gi_id.y)).rgb;
+		}
+
+		if (li_id.y < HALF_WINDOW)
+		{
+			if (gi_id.x < HALF_WINDOW || gi_id.y < HALF_WINDOW)
+			{
+				tmp[li_id.y][li_id.x + 2*HALF_WINDOW] = vec3(0.0f);
+			}
+			else
+			{
+				tmp[li_id.y][li_id.x + 2*HALF_WINDOW] = imageLoad(inImage, ivec2(gi_id.x + HALF_WINDOW, gi_id.y - HALF_WINDOW)).rgb;
+			}
+		}
+		else if (li_id.y > wgSize.y - HALF_WINDOW - 1)
+		{
+			if (gi_id.x < HALF_WINDOW || gi_id.y > imageSize.y - HALF_WINDOW - 1)
+			{
+				tmp[li_id.y + 2*HALF_WINDOW][li_id.x + 2*HALF_WINDOW] = vec3(0.0f);
+			}
+			else
+			{
+				tmp[li_id.y + 2*HALF_WINDOW][li_id.x + 2*HALF_WINDOW] = imageLoad(inImage, ivec2(gi_id.x + HALF_WINDOW, gi_id.y + HALF_WINDOW)).rgb;
+			}
+		}
+	}
+
+	if (li_id.y < HALF_WINDOW)
+	{
+		if (gi_id.y < HALF_WINDOW)
+		{
+			tmp[li_id.y][li_id.x + HALF_WINDOW] = vec3(0.0f);
+		}
+		else
+		{
+			tmp[li_id.y][li_id.x + HALF_WINDOW] = imageLoad(inImage, ivec2(gi_id.x, gi_id.y - HALF_WINDOW)).rgb;
+		}
+	}
+	else if (li_id.y > wgSize.y - HALF_WINDOW - 1)
+	{
+		if (gi_id.y > imageSize.y + HALF_WINDOW - 1)
+		{
+			tmp[li_id.y + 2*HALF_WINDOW][li_id.x + HALF_WINDOW] = vec3(0.0f);
+		}
+		else
+		{
+			tmp[li_id.y + 2*HALF_WINDOW][li_id.x + HALF_WINDOW] = imageLoad(inImage, ivec2(gi_id.x, gi_id.y + HALF_WINDOW)).rgb;
+		}
+	}
+}
+
+void main()
+{
+	ivec2 imageSize = imageSize(inImage);
+	uvec2 gi_id = gl_GlobalInvocationID.xy;
+
+	if (gi_id.x >= imageSize.x || gi_id.y >= imageSize.y)
+	{
+		return;
+	}
+
+	uvec2 li_id = gl_LocalInvocationID.xy;
+
+	loadImgPart();
+	
+	barrier();
+	
+	vec3 accum = vec3(0.0f);
+	ivec2 my_coord = ivec2(li_id.x + HALF_WINDOW, li_id.y + HALF_WINDOW);
+	for (int i = -HALF_WINDOW; i <= HALF_WINDOW; ++i)
+	{
+		accum += gauss_coeff[HALF_WINDOW + i] * tmp[my_coord.y][my_coord.x + i];
+	}
+	
+	barrier();
+	
+	tmp[my_coord.y][my_coord.x] = accum;
+	
+	barrier();
+
+	accum = vec3(0.0f);
+	for (int i = -HALF_WINDOW; i <= HALF_WINDOW; ++i)
+	{
+		accum += gauss_coeff[HALF_WINDOW + i] * tmp[my_coord.y + i][my_coord.x];
+	}
+
+	barrier();
+
+	imageStore(outImage, ivec2(gi_id), vec4(accum, 1.0));
+}

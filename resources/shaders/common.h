@@ -3,6 +3,8 @@
 
 // GLSL-C++ datatype compatibility layer
 
+const int WORKGROUP_DIM = 16;
+
 #ifdef __cplusplus
 
 #include <LiteMath.h>
@@ -49,6 +51,7 @@ struct UniformParams
   shader_float time;
   shader_vec3  baseColor;
   shader_bool  animateLightColor;
+  shader_bool  isVSMEnabled;
 };
 
 #endif // VK_GRAPHICS_BASIC_COMMON_H

@@ -20,6 +20,7 @@ layout(binding = 0, set = 0) uniform AppData
 };
 
 layout (binding = 1) uniform sampler2D shadowMap;
+layout (binding = 2) uniform sampler2D vsmMap;
 
 void main()
 {
@@ -28,7 +29,19 @@ void main()
   const vec2 shadowTexCoord    = posLightSpaceNDC.xy*0.5f + vec2(0.5f, 0.5f);  // just shift coords from [-1,1] to [0,1]               
     
   const bool  outOfView = (shadowTexCoord.x < 0.0001f || shadowTexCoord.x > 0.9999f || shadowTexCoord.y < 0.0091f || shadowTexCoord.y > 0.9999f);
-  const float shadow    = ((posLightSpaceNDC.z < textureLod(shadowMap, shadowTexCoord, 0).x + 0.001f) || outOfView) ? 1.0f : 0.0f;
+  float shadow    = ((posLightSpaceNDC.z < textureLod(shadowMap, shadowTexCoord, 0).x + 0.001f) || outOfView) ? 1.0f : 0.0f;
+
+  if (Params.isVSMEnabled)
+  {
+    vec2 vsm = textureLod(vsmMap, shadowTexCoord, 0).xy;
+    float d = vsm.x;
+    float d2 = vsm.y;
+
+    float diff = posLightSpaceNDC.z - d;
+    float sigma = d2 - d*d;
+
+    shadow = ((posLightSpaceNDC.z < d + 0.0001f) || outOfView) ? 1.0f : sigma/(sigma + diff*diff);
+  }
 
   const vec4 dark_violet = vec4(0.59f, 0.0f, 0.82f, 1.0f);
   const vec4 chartreuse  = vec4(0.5f, 1.0f, 0.0f, 1.0f);
