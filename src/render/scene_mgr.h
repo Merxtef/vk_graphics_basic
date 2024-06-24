@@ -60,6 +60,7 @@ struct SceneManager
 
 private:
   void LoadGeoDataOnGPU();
+  void CreateFlatSurface(float3 pos, float3 offset, float3 scale, size_t squaresPerSide);
 
   std::vector<MeshInfo> m_meshInfos = {};
   std::vector<LiteMath::Box4f> m_meshBboxes = {};

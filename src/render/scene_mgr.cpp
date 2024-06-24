@@ -20,6 +20,60 @@ VkTransformMatrixKHR transformMatrixFromFloat4x4(const LiteMath::float4x4 &m)
   return transformMatrix;
 }
 
+void SceneManager::CreateFlatSurface(float3 pos, float3 offset, float3 scale, size_t squaresPerSide)
+{
+    cmesh::SimpleMesh mesh = cmesh::SimpleMesh();
+
+    float delta = 1.f / squaresPerSide;
+    size_t vertsPerSide = squaresPerSide + 1;
+    size_t totalVerts = vertsPerSide * vertsPerSide;
+    size_t totalSquares = squaresPerSide * squaresPerSide;
+
+    mesh.vPos4f.resize(4 * totalVerts);
+    mesh.vNorm4f.resize(4 * totalVerts);
+    mesh.vTexCoord2f.resize(2 * totalVerts);
+    mesh.vTang4f = std::vector<float>(4 * totalVerts, 0);
+    mesh.indices.resize(6 * totalSquares);
+
+    for (int i = 0; i < vertsPerSide; ++i)
+        for (int j = 0; j < vertsPerSide; ++j)
+        {
+            const int count = (i * vertsPerSide + j);
+            mesh.vPos4f[4LL * count]     = j * delta - offset.x;
+            mesh.vPos4f[4LL * count + 1] = offset.y;
+            mesh.vPos4f[4LL * count + 2] = i * delta - offset.z;
+            mesh.vPos4f[4LL * count + 3] = 1.f;
+
+            mesh.vNorm4f[4LL * count]     = 0.f;
+            mesh.vNorm4f[4LL * count + 1] = 1.f;
+            mesh.vNorm4f[4LL * count + 2] = 0.f;
+            mesh.vNorm4f[4LL * count + 3] = 0.f;
+            
+            mesh.vTexCoord2f[2LL * count]     = j * delta;
+            mesh.vTexCoord2f[2LL * count + 1] = i * delta;
+        }
+
+    for (int i = 0; i < squaresPerSide; ++i)
+        for (int j = 0; j < squaresPerSide; ++j)
+        {
+            const int count = (i * squaresPerSide + j);
+            mesh.indices[6LL * count]     = i       * vertsPerSide + j;
+            mesh.indices[6LL * count + 1] = i       * vertsPerSide + j + 1;
+            mesh.indices[6LL * count + 2] = (i + 1) * vertsPerSide + j;
+            mesh.indices[6LL * count + 3] = (i + 1) * vertsPerSide + j;
+            mesh.indices[6LL * count + 4] = (i + 1) * vertsPerSide + j + 1;
+            mesh.indices[6LL * count + 5] = i       * vertsPerSide + j + 1;
+        }
+
+    AddMeshFromData(mesh);
+    auto mat = LiteMath::translate4x4(pos) * LiteMath::scale4x4(scale);
+    m_instanceMatrices.push_back(mat);
+    m_instanceInfos.push_back(InstanceInfo{
+        .mesh_id = static_cast<uint32_t>(m_instanceInfos.size()),
+        .renderMark = true
+    });
+}
+
 SceneManager::SceneManager(VkDevice a_device, VkPhysicalDevice a_physDevice,
   uint32_t a_transferQId, uint32_t a_graphicsQId, bool debug) : m_device(a_device), m_physDevice(a_physDevice),
                  m_transferQId(a_transferQId), m_graphicsQId(a_graphicsQId), m_debug(debug)
@@ -43,18 +97,7 @@ bool SceneManager::LoadSceneXML(const std::string &scenePath, bool transpose)
     return false;
   }
 
-  for(auto loc : hscene_main->MeshFiles())
-  {
-    auto meshId    = AddMeshFromFile(loc);
-    auto instances = hscene_main->GetAllInstancesOfMeshLoc(loc); 
-    for(size_t j = 0; j < instances.size(); ++j)
-    {
-      if(transpose)
-        InstanceMesh(meshId, LiteMath::transpose(instances[j]));
-      else
-        InstanceMesh(meshId, instances[j]);
-    }
-  }
+  CreateFlatSurface({ 0.f, -0.5f, 0.f }, { 0.5f, 0.f, 0.5f }, float3(3.f), 1024);
 
   for(auto cam : hscene_main->Cameras())
   {
