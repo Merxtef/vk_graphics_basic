@@ -27,6 +27,7 @@ public:
   SimpleShadowmapRender(uint32_t a_width, uint32_t a_height);
   ~SimpleShadowmapRender();
 
+  uint32_t     GetSSAAScale()  const { return (m_isSsaa) ? 2 : 1; }
   uint32_t     GetWidth()      const override { return m_width; }
   uint32_t     GetHeight()     const override { return m_height; }
   VkInstance   GetVkInstance() const override { return m_context->getInstance(); }
@@ -46,8 +47,10 @@ public:
 private:
   etna::GlobalContext* m_context;
   etna::Image mainViewDepth;
+  etna::Image ssaaImage;
   etna::Image shadowMap;
   etna::Sampler defaultSampler;
+  etna::Sampler linearSampler;
   etna::Buffer constants;
 
   VkCommandPool    m_commandPool    = VK_NULL_HANDLE;
@@ -77,6 +80,7 @@ private:
 
   etna::GraphicsPipeline m_basicForwardPipeline {};
   etna::GraphicsPipeline m_shadowPipeline {};
+  etna::GraphicsPipeline m_ssaaPipeline{};
   
   VkSurfaceKHR m_surface = VK_NULL_HANDLE;
   VulkanSwapChain m_swapchain;
@@ -85,7 +89,9 @@ private:
   uint32_t m_width  = 1024u;
   uint32_t m_height = 1024u;
   uint32_t m_framesInFlight = 2u;
+  uint32_t m_curScale = -1;
   bool m_vsync = false;
+  bool m_isSsaa = false;
 
   vk::PhysicalDeviceFeatures m_enabledDeviceFeatures = {};
   std::vector<const char*> m_deviceExtensions;
@@ -139,6 +145,8 @@ private:
 
 
   void SetupDeviceExtensions();
+
+  void InitImages(uint32_t scale);
 
   void AllocateResources();
   void PreparePipelines();
